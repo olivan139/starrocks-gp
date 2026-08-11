@@ -40,10 +40,16 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
 
 CastColumnIterator::~CastColumnIterator() = default;
 
+<<<<<<< HEAD
 void CastColumnIterator::do_cast(Column* target) {
     auto cast_result = _cast_expr->evaluate(nullptr, &_source_chunk);
     cast_result =
             ColumnHelper::unfold_const_column(_cast_expr->type(), _source_chunk.num_rows(), std::move(cast_result));
+=======
+Status CastColumnIterator::do_cast(Column* target) {
+    ASSIGN_OR_RETURN(auto cast_result, _cast_expr->evaluate_checked(nullptr, &_source_chunk));
+    cast_result = ColumnHelper::unfold_const_column(_cast_expr->type(), _source_chunk.num_rows(), cast_result);
+>>>>>>> 2e4febaf7f ([BugFix] Propagate child expression errors instead of aborting the BE (#77442))
     if ((target->is_nullable() == cast_result->is_nullable()) && (target->size() == 0)) {
         target->swap_column(*(cast_result->as_mutable_raw_ptr()));
     } else if (!target->is_nullable() && cast_result->is_nullable()) {
@@ -52,13 +58,14 @@ void CastColumnIterator::do_cast(Column* target) {
     } else {
         target->append(*cast_result, 0, cast_result->size());
     }
+    return Status::OK();
 }
 
 Status CastColumnIterator::next_batch(size_t* n, Column* dst) {
     _source_chunk.reset();
     auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
     RETURN_IF_ERROR(_parent->next_batch(n, source_column));
-    do_cast(dst);
+    RETURN_IF_ERROR(do_cast(dst));
     return Status::OK();
 }
 
@@ -66,7 +73,7 @@ Status CastColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     _source_chunk.reset();
     auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
     RETURN_IF_ERROR(_parent->next_batch(range, source_column));
-    do_cast(dst);
+    RETURN_IF_ERROR(do_cast(dst));
     return Status::OK();
 }
 
@@ -74,7 +81,7 @@ Status CastColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     _source_chunk.reset();
     auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
     RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column));
-    do_cast(values);
+    RETURN_IF_ERROR(do_cast(values));
     return Status::OK();
 }
 
