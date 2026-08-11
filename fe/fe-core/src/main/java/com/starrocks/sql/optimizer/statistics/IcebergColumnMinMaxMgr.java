@@ -83,7 +83,26 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
     }
 
     @Override
+<<<<<<< HEAD
     public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+=======
+    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
+        if (!ConnectContext.get().getSessionVariable().isEnableMinMaxOptimization()) {
+            return Optional.empty();
+        }
+
+        try {
+            CompletableFuture<Optional<ColumnMinMax>> result = cache.get(new CacheKey(identifier, version.getVersion()));
+            return result.get();
+        } catch (Exception e) {
+            LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public void removeStats(ColumnIdentifier identifier) {
+>>>>>>> c082ce9cd1 ([BugFix] Invalidate the min/max stats cache on partition and schema DDL (#77441))
         throw new SemanticException("Iceberg column min/max stats unsupported the method");
     }
 
