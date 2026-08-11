@@ -101,7 +101,35 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+=======
+    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
+        if (!REPLAY_MINMAX.isEmpty()) {
+            ColumnMinMax replay = REPLAY_MINMAX.get(identifier);
+            if (replay != null) {
+                return Optional.of(replay);
+            }
+        }
+        try {
+            CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
+            Optional<CacheValue> cacheValue = future.get();
+            if (cacheValue.isPresent()) {
+                CacheValue value = cacheValue.get();
+                if (value.version().getVersion() >= version.getVersion()) {
+                    return Optional.of(value.minMax());
+                }
+                cache.synchronous().invalidate(identifier);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public void removeStats(ColumnIdentifier identifier) {
+>>>>>>> c082ce9cd1 ([BugFix] Invalidate the min/max stats cache on partition and schema DDL (#77441))
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;

@@ -819,4 +819,93 @@ public class MetaFunctions {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Return the query ID of the last executed query in the current session.
+     */
+    @ConstantFunction(name = "last_query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator lastQueryId() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        UUID lastQueryId = connectContext.getLastQueryId();
+        if (lastQueryId == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        return ConstantOperator.createVarchar(lastQueryId.toString());
+    }
+
+    /**
+     * Invalidate global dictionary for a column, and return the result status.
+     */
+    @ConstantFunction(name = "invalidate_global_dict", argTypes = {VARCHAR,
+            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator invalidateGlobalDict(ConstantOperator tableName, ConstantOperator columnName) {
+        authOperatorPrivilege();
+
+        OlapTable table = inspectOlapTable(tableName);
+        String column = columnName.getVarchar();
+
+        CacheDictManager instance = CacheDictManager.getInstance();
+        ColumnId columnId = ColumnId.create(column);
+
+        // Check if global dict exists before attempting to invalidate
+        if (!instance.hasGlobalDict(table.getId(), columnId)) {
+            return ConstantOperator.createVarchar("No global dictionary found for column: " + column);
+        }
+
+        try {
+            instance.removeGlobalDict(table, columnId);
+        } catch (Exception e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR,
+                    "Failed to invalidate global dictionary: " + e.getMessage());
+        }
+        return ConstantOperator.createVarchar("invalidated column dict");
+    }
+
+    /**
+     * Inspect the MinMaxStats of a column
+     */
+    @ConstantFunction(name = "inspect_minmax",
+            argTypes = {VARCHAR, VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMinMax(ConstantOperator tableName, ConstantOperator columnName) {
+        OlapTable table = inspectOlapTable(tableName);
+        ColumnId columnId = ColumnId.create(columnName.getVarchar());
+        // getTableLastUpdateTimestamp may return null (table never updated); treat as version 0 to
+        // avoid an auto-unboxing NPE when constructing StatsVersion.
+        Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
+        long version = lastUpdateTime == null ? 0L : lastUpdateTime;
+
+        Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
+                .getStatsSync(new ColumnIdentifier(table.getId(), columnId),
+                        new StatsVersion(-1, version));
+
+        return minMax.map(columnMinMax -> ConstantOperator.createVarchar(columnMinMax.toString()))
+                .orElseGet(() -> ConstantOperator.createNull(VarcharType.VARCHAR));
+    }
+
+    /**
+     * Invalidate MinMax statistics for a column, and return the result status.
+     */
+    @ConstantFunction(name = "invalidate_minmax", argTypes = {VARCHAR,
+            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator invalidateMinMax(ConstantOperator tableName, ConstantOperator columnName) {
+        authOperatorPrivilege();
+
+        OlapTable table = inspectOlapTable(tableName);
+        ColumnId columnId = ColumnId.create(columnName.getVarchar());
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(table.getId(), columnId);
+
+        try {
+            IMinMaxStatsMgr.internalInstance().removeStats(columnIdentifier);
+        } catch (Exception e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR,
+                    "Failed to invalidate MinMax statistics: " + e.getMessage());
+        }
+        return ConstantOperator.createVarchar("invalidated column minmax");
+    }
+
+>>>>>>> c082ce9cd1 ([BugFix] Invalidate the min/max stats cache on partition and schema DDL (#77441))
 }
