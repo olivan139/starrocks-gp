@@ -103,6 +103,34 @@ public class DistinctAggTest extends PlanTestBase {
                 "  |  offset: 0");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void testDistinctArrayAggOnConstantSubqueryColumns() throws Exception {
+        String sql = "select array_agg(distinct aaa), array_agg(distinct bbb) as equip_type " +
+                "from (select 'xxxx' as aaa, 'xxx' as bbb) t";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: array_agg(DISTINCT 'xxxx'), array_agg(DISTINCT 'xxx')");
+        assertNotContains(plan, "array_agg_distinct");
+    }
+
+    @Test
+    void testMultiColumnCountDistinctKeepsDecimalPrecision() throws Exception {
+        // The if() wrapping the distinct columns must carry the precision/scale of its branches,
+        // otherwise the BE receives an expression typed DECIMAL(-1,-1) and cannot build a result
+        // column for it.
+        String sql = "select count(distinct t1a, id_decimal) from test_all_type group by t1b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "result: DECIMAL64(10,2)");
+        assertNotContains(plan, "result: DECIMAL64;");
+
+        sql = "select count(distinct t1a, id_decimal) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "result: DECIMAL64(10,2)");
+        assertNotContains(plan, "result: DECIMAL64;");
+    }
+
+>>>>>>> 5471609cdb ([BugFix] Keep the decimal type of the if() built for multi-column count(distinct) (#77346))
     private static Stream<Arguments> sqlWithDistinctLimit() {
         List<Arguments> argumentsList = Lists.newArrayList();
         argumentsList.add(Arguments.of("select count(distinct v1, v2) from (select * from t0 limit 2) t",
