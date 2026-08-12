@@ -25,6 +25,26 @@ struct TNormalOlapScanNode {
   13: optional list<i64> selected_partition_ids;
   14: optional list<i64> selected_partition_versions;
   15: optional PlanNodes.TTableSampleOptions sample_options;
+<<<<<<< HEAD
+=======
+  // The ANN search spec. RewriteToVectorPlanRule replaces the distance function in the scan's
+  // projection with an opaque __vector_* column ref and moves the query vector, the folded
+  // distance-range bound and the ordering into TVectorSearchOptions, so none of them survive
+  // anywhere else in the plan -- two ANN scans differing only in the query vector would
+  // otherwise normalize identically. The plan-local distance slot id and column name are
+  // cleared before serializing: they are per-query state, and leaving them in would give
+  // structurally identical plans different digests and stop them sharing an entry.
+  16: optional binary vector_search_options;
+  // The schema the scan reads with. A fast schema evolution (ADD/DROP COLUMN) deliberately does
+  // not rewrite data, so it leaves the partition versions -- and therefore the rest of the cache
+  // key -- untouched, while changing what the very same query returns. Without this field the
+  // entries populated before such a DDL keep being served after it.
+  //
+  // Set only when the schema has actually diverged from the index it belongs to, so that tables
+  // which were never altered keep the digest they had before this field existed. See the note in
+  // OlapScanNode.toNormalForm().
+  17: optional i64 schema_id;
+>>>>>>> 4eb7a36fa7 ([BugFix] Put the ANN search spec into the query cache digest (#77586))
 }
 
 struct TNormalProjectNode {
