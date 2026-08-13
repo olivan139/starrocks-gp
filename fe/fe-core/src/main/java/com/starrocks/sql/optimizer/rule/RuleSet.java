@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.GreenplumScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
@@ -211,6 +212,7 @@ public class RuleSet {
             new MetaScanImplementationRule(),
             new CacheStatsScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new GreenplumScanImplementationRule(),
             new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),

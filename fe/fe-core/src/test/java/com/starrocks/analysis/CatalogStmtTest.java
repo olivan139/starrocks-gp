@@ -72,6 +72,12 @@ public class CatalogStmtTest {
                 "CREATE EXTERNAL CATALOG 'catalog_6' PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")",
                 AstToStringBuilder.toString(stmt3));
         Assertions.assertTrue(stmt3 instanceof CreateCatalogStmt);
+
+        String sql_greenplum = "CREATE EXTERNAL CATALOG catalog_greenplum PROPERTIES(\"type\"=\"greenplum\","
+                + "\"greenplum.host\"=\"127.0.0.1\",\"greenplum.database\"=\"db\",\"greenplum.user\"=\"u\","
+                + "\"greenplum.password\"=\"p\")";
+        StatementBase stmtGreenplum = AnalyzeTestUtil.analyzeSuccess(sql_greenplum);
+        Assertions.assertTrue(stmtGreenplum instanceof CreateCatalogStmt);
     }
 
     @Test

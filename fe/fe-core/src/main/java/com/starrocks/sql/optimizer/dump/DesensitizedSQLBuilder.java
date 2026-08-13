@@ -121,6 +121,7 @@ public class DesensitizedSQLBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.GREENPLUM
                 || table.getType() == Table.TableType.FILE
                 || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
@@ -519,6 +520,16 @@ public class DesensitizedSQLBuilder {
                 sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
                 sb.append("\"table\" = \"").append(desensitizedTblName).append("\"");
                 sb.append("\n)");
+            } else if (table.getType() == Table.TableType.GREENPLUM) {
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"host\" = \"").append("localhost").append("\",\n");
+                sb.append("\"port\" = \"").append("5432").append("\",\n");
+                sb.append("\"user\" = \"").append("root").append("\",\n");
+                sb.append("\"password\" = \"").append("\",\n");
+                sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\"\n");
+                sb.append(")");
             }
             sb.append(";");
             return sb.toString();

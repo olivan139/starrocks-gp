@@ -31,6 +31,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
+import com.starrocks.connector.greenplum.MockedGreenplumMetadata;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
@@ -100,6 +101,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
+        mockGreenplumCatalogImpl(metadataMgr);
         mockPaimonCatalogImpl(metadataMgr, warehouse);
         mockIcebergCatalogImpl(metadataMgr);
         mockDeltaLakeCatalog(metadataMgr);
@@ -120,6 +122,9 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 break;
             case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
                 mockJDBCCatalogImpl(metadataMgr);
+                break;
+            case MockedGreenplumMetadata.MOCKED_GREENPLUM_CATALOG_NAME:
+                mockGreenplumCatalogImpl(metadataMgr);
                 break;
             case MOCK_PAIMON_CATALOG_NAME:
                 Preconditions.checkState(!Strings.isNullOrEmpty(warehouse));
@@ -143,6 +148,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         try {
             dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
             dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            dropCatalog(MockedGreenplumMetadata.MOCKED_GREENPLUM_CATALOG_NAME);
             dropCatalog(MOCK_PAIMON_CATALOG_NAME);
             dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
             dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
@@ -369,6 +375,17 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 createCatalog("jdbc", MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME, "", pgProperties);
         metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME,
                 new MockedJDBCMetadata(pgProperties));
+    }
+
+    private static void mockGreenplumCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("type", "greenplum");
+        properties.putAll(MockedGreenplumMetadata.VALID_PROPERTIES);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().
+                createCatalog("greenplum", MockedGreenplumMetadata.MOCKED_GREENPLUM_CATALOG_NAME, "", properties);
+
+        MockedGreenplumMetadata mockedGreenplumMetadata = new MockedGreenplumMetadata();
+        metadataMgr.registerMockedMetadata(MockedGreenplumMetadata.MOCKED_GREENPLUM_CATALOG_NAME, mockedGreenplumMetadata);
     }
 
     private static void mockIcebergCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {

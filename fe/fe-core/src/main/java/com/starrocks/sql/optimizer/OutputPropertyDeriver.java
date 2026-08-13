@@ -51,6 +51,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -746,6 +747,11 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
+        return createGatherPropertySet();
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalGreenplumScan(PhysicalGreenplumScanOperator node, ExpressionContext context) {
         return createGatherPropertySet();
     }
 

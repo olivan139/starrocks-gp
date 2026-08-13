@@ -703,6 +703,17 @@ struct TJDBCTable {
 }
 
 // "Union" of all table types.
+// Greenplum / Arenadata DB external table. Connection info for the BE-side
+// native (libpq) access path. Credentials are delivered per-query from FE;
+// BE must never persist them.
+struct TGreenplumTable {
+    1: optional string host
+    2: optional string port
+    3: optional string database
+    4: optional string user
+    5: optional string passwd
+}
+
 struct TTableDescriptor {
   1: required Types.TTableId id
   2: required Types.TTableType tableType
@@ -741,6 +752,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Greenplum Table schema
+  37: optional TGreenplumTable greenplumTable
 }
 
 struct TDescriptorTable {

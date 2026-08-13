@@ -24,6 +24,7 @@ import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -44,6 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.connector.greenplum.GreenplumConnectorConstants;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
@@ -138,7 +140,7 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
-                || table.getType() == Table.TableType.FILE) {
+                || table.getType() == Table.TableType.GREENPLUM || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
         if (isTemporary) {
@@ -352,6 +354,22 @@ public class AstToStringBuilder {
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
             sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.GREENPLUM) {
+            GreenplumTable greenplumTable = (GreenplumTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            Map<String, String> connectInfo = greenplumTable.getConnectInfo();
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"").append(GreenplumConnectorConstants.HOST).append("\" = \"")
+                    .append(connectInfo.get(GreenplumConnectorConstants.HOST)).append("\",\n");
+            sb.append("\"").append(GreenplumConnectorConstants.PORT).append("\" = \"")
+                    .append(connectInfo.get(GreenplumConnectorConstants.PORT)).append("\",\n");
+            sb.append("\"").append(GreenplumConnectorConstants.DATABASE).append("\" = \"")
+                    .append(connectInfo.get(GreenplumConnectorConstants.DATABASE)).append("\",\n");
+            sb.append("\"").append(GreenplumConnectorConstants.USER).append("\" = \"")
+                    .append(connectInfo.get(GreenplumConnectorConstants.USER)).append("\"");
             sb.append("\n)");
         }
         sb.append(";");
