@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.common.UnsupportedException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -65,5 +66,19 @@ public class GreenplumPlanTest extends ConnectorPlanTestBase {
         assertContains(plan, "SCAN GREENPLUM");
         assertContains(plan, "OlapScanNode");
         assertContains(plan, "JOIN");
+    }
+
+    @Test
+    public void testInsertIntoGreenplum() throws Exception {
+        String sql = "INSERT INTO greenplum0.gp_schema.t0 SELECT a, b, c FROM greenplum0.gp_schema.t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "GREENPLUM TABLE SINK");
+    }
+
+    @Test
+    public void testInsertOverwriteGreenplumFails() {
+        String sql = "INSERT OVERWRITE greenplum0.gp_schema.t0 SELECT a, b, c FROM greenplum0.gp_schema.t0";
+        Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql),
+                "Only support insert overwrite olap/iceberg/hive table");
     }
 }

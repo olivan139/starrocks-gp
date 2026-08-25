@@ -19,6 +19,7 @@ namespace starrocks::connector {
 const std::string Connector::HIVE = "hive";
 const std::string Connector::ES = "es";
 const std::string Connector::JDBC = "jdbc";
+const std::string Connector::GREENPLUM = "greenplum";
 const std::string Connector::MYSQL = "mysql";
 const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";

@@ -21,6 +21,7 @@
 #include "exec/data_sinks/data_stream_sender.h"
 #include "exec/data_sinks/dictionary_cache_sink.h"
 #include "exec/data_sinks/export_sink.h"
+#include "exec/data_sinks/greenplum_table_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec/data_sinks/multi_olap_table_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
@@ -89,6 +90,14 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         }
         // TODO: figure out good buffer size based on size of output row
         *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), row_desc, output_exprs);
+        break;
+    }
+
+    case TDataSinkType::GREENPLUM_TABLE_SINK: {
+        if (!thrift_sink.__isset.greenplum_table_sink) {
+            return Status::InternalError("Missing greenplum table sink.");
+        }
+        *sink = std::make_unique<GreenplumTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
 

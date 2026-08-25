@@ -270,6 +270,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
     pipeline/sink/dictionary_cache_sink_operator.cpp
+    pipeline/sink/greenplum_table_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
@@ -512,6 +513,7 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/dictionary_cache_sink.cpp
     data_sinks/export_sink.cpp
     data_sinks/file_result_writer.cpp
+    data_sinks/greenplum_table_sink.cpp
     data_sinks/hive_table_sink.cpp
     data_sinks/http_result_writer.cpp
     data_sinks/iceberg_table_sink.cpp

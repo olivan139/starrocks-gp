@@ -80,6 +80,51 @@ in parentheses, and `limit == -1` means absent.
    timestamp→DATETIME), so the CSV decode must parse into exactly the slot types of the tuple descriptor.
 5. Cancellation: on fragment cancel, `PQcancel` the in-flight COPY.
 
+## M2 — Write path: `INSERT INTO greenplum_catalog.schema.tbl SELECT ...`
+
+### What the FE does (already implemented)
+
+1. Plans the query with a **`GREENPLUM_TABLE_SINK`** on the top fragment (`TDataSink` field 18,
+   `TGreenplumTableSink`); pipeline sink DOP applies (fragment flag registered in `hasTableSink()`).
+2. After fragments are deployed (`coord.exec()` returns), the FE collects the distinct hosts running
+   sink fragment instances and launches `GreenplumLoadOrchestrator` on its own thread, which runs
+   ONE Greenplum transaction over pgjdbc (service account):
+   `BEGIN; CREATE READABLE EXTERNAL TABLE "schema"."ext_sr_<token>" (LIKE target)
+   LOCATION('<scheme>://<beHost>:<gpfdistPort>/<token>', ... one per sink host)
+   FORMAT 'TEXT' (DELIMITER E'\t' NULL E'\\N'); INSERT INTO target SELECT * FROM ext;
+   DROP EXTERNAL TABLE ext; COMMIT/ROLLBACK`.
+   DDL is transactional in GP → no orphans on any failure; COMMIT happens only after row-count
+   reconciliation (below).
+3. On success of the StarRocks query, FE sums `TSinkCommitInfo.greenplum_sink_info.rows_written`
+   over all sink instances and compares with the update count returned by the GP `INSERT`.
+   Mismatch → `ROLLBACK` + user-facing error. On any failure/cancel → statement cancel + `ROLLBACK`.
+
+### What the BE sink must implement
+
+1. **Dispatch**: `case TDataSinkType::GREENPLUM_TABLE_SINK` in `data_sink_factory.cpp` and the
+   connector-sink branch in `fragment_executor.cpp` (~l.765) — route into your
+   `GreenplumChunkSink : ConnectorChunkSink`.
+2. **Session**: on open, register a gpfdist session in the local registry under path
+   `/<session_token>` (from `TGreenplumTableSink.session_token`). All sink instances of one query
+   on the same BE feed the SAME session (aggregate; the per-BE endpoint is single). Segments GET
+   `<scheme>://host:port/<token>` — serve blocks from the session queue (one block → exactly one
+   requester; whole rows only).
+3. **Row encoding**: TEXT format, `column_separator` / `null_marker` from the sink thrift
+   (defaults TAB and `\N`) — MUST match what the FE put into the external table DDL. Escape per GP
+   TEXT rules (backslash escapes for delimiter/newline/backslash inside values).
+4. **Completion**: when all local sink instances finished pushing chunks, mark session EOF →
+   GET responses finish with `D` len-0 frames; report total rows served in
+   `TSinkCommitInfo.greenplum_sink_info.rows_written` (one commit info per sink instance is fine —
+   FE sums them; `bytes_written`/`location_slot` optional diagnostics).
+5. **Failure**: on fragment cancel, terminate the session with an `E` frame (its text surfaces to
+   the GP user) and drop pending queues. Sessions must TTL-GC if the FE never closes them.
+6. **Ports**: the gpfdist listener port must equal the catalog property `greenplum.gpfdist.port`
+   on every BE (BE config; default 8907). Scheme `gpfdist` (plain) or `gpfdists` (mTLS) per
+   `transport_scheme`.
+7. **Constraint**: number of LOCATION URLs (= distinct sink hosts) must be ≤ GP primary segment
+   count, or GP rejects the DDL. FE currently fails the load with a clear error in that case;
+   reducing sink DOP/host fan-out is the operator remedy.
+
 ## Invariants
 
 - New thrift fields are all `optional`; never reuse ordinals (`TTableDescriptor:37`, `TPlanNode:86`,

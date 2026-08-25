@@ -17,8 +17,11 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.greenplum.GreenplumReadOrchestrator;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -52,11 +55,43 @@ public class GreenplumScanNode extends ScanNode {
     private final List<String> filters = new ArrayList<>();
     private final GreenplumTable table;
     private final String tableName;
+    private final String sessionToken;
 
     public GreenplumScanNode(PlanNodeId id, TupleDescriptor desc, GreenplumTable tbl) {
         super(id, desc, "SCAN GREENPLUM");
         table = tbl;
         tableName = qualifiedTableName(tbl);
+        ConnectContext ctx = ConnectContext.get();
+        String qid = ctx != null && ctx.getExecutionId() != null
+                ? GreenplumReadOrchestrator.sessionToken(ctx.getExecutionId()) : "noctx";
+        this.sessionToken = qid + "_n" + id.asInt();
+    }
+
+    public String getSessionToken() {
+        return sessionToken;
+    }
+
+    public GreenplumTable getGreenplumTable() {
+        return table;
+    }
+
+    // Column definitions for the writable external table the read orchestrator
+    // creates on Greenplum: the PROJECTED, materialized scan columns, in the
+    // order the BE decoder expects (== the tuple's materialized slots).
+    public List<Column> getProjectedColumns() {
+        List<Column> cols = new ArrayList<>();
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (slot.isMaterialized() && slot.getColumn() != null) {
+                cols.add(slot.getColumn());
+            }
+        }
+        return cols;
+    }
+
+    // The SELECT that reads the projected/filtered rows from the GP source;
+    // wrapped by the orchestrator as INSERT INTO <ext> <this sql>.
+    public String getReadSelectSql() {
+        return buildQuerySql();
     }
 
     private static String qualifiedTableName(GreenplumTable tbl) {
@@ -172,7 +207,10 @@ public class GreenplumScanNode extends ScanNode {
         msg.greenplum_scan_node.setFilters(filters);
         msg.greenplum_scan_node.setLimit(limit);
         msg.greenplum_scan_node.setSql(buildQuerySql());
-        msg.greenplum_scan_node.setTransport(table.getTransport());
+        msg.greenplum_scan_node.setTransport("gpfdist");
+        msg.greenplum_scan_node.setSession_token(sessionToken);
+        msg.greenplum_scan_node.setColumn_separator(table.getColumnSeparator());
+        msg.greenplum_scan_node.setNull_marker(table.getNullMarker());
 
         setConnectorCatalogType(msg);
     }

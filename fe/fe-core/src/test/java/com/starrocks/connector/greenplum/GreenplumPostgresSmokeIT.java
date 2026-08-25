@@ -109,4 +109,30 @@ public class GreenplumPostgresSmokeIT {
         // plain Postgres has no gp_segment_configuration: graceful fallback to 1
         assertEquals(1, metadata.getSegmentCount());
     }
+
+    /**
+     * Live check of the write-path orchestrator's JDBC plumbing. Plain
+     * PostgreSQL cannot accept CREATE READABLE EXTERNAL TABLE (GP-only
+     * syntax), so the expected outcome is a clean, user-facing failure —
+     * which exercises: connection open (with TimeZone=UTC options), the
+     * pre-transaction segment-count probe degrading gracefully on non-GP,
+     * transaction begin, DDL dispatch, error propagation through
+     * Handle.finish(), rollback and connection close.
+     */
+    @Test
+    public void testOrchestratorErrorSurfaceOnPlainPostgres() {
+        GreenplumTable table = (GreenplumTable) metadata.getTable(null, "dwh", "fact");
+        assertNotNull(table);
+        GreenplumLoadOrchestrator.Handle handle = GreenplumLoadOrchestrator.start(
+                table, "smoke_token", java.util.Collections.singletonList("127.0.0.1"), 30);
+        try {
+            handle.finish(0);
+            org.junit.jupiter.api.Assertions.fail("expected failure: plain PostgreSQL cannot create "
+                    + "a readable external table");
+        } catch (Exception e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage();
+            assertTrue(msg.contains("greenplum load failed"),
+                    "expected a wrapped greenplum load error, got: " + msg);
+        }
+    }
 }

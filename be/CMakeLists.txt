@@ -275,6 +275,12 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
 # -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
 if (NOT APPLE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+else()
+    # Homebrew LLVM's libc++ does not re-export typeinfo for the __int128
+    # builtins (typeinfo for __int128 / unsigned __int128), which std::any and
+    # typeid over __int128 columns need. Apple's SDK libc++abi provides them,
+    # so link it explicitly.
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++abi")
 endif()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 

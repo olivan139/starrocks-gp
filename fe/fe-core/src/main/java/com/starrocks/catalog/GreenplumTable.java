@@ -117,6 +117,26 @@ public class GreenplumTable extends Table {
                 GreenplumConnectorConstants.TRANSPORT_COPY);
     }
 
+    public String getColumnSeparator() {
+        return getConnectInfo().getOrDefault(GreenplumConnectorConstants.COLUMN_SEPARATOR,
+                GreenplumConnectorConstants.DEFAULT_COLUMN_SEPARATOR);
+    }
+
+    public String getNullMarker() {
+        return getConnectInfo().getOrDefault(GreenplumConnectorConstants.NULL_MARKER,
+                GreenplumConnectorConstants.DEFAULT_NULL_MARKER);
+    }
+
+    public String getTransportScheme() {
+        return getConnectInfo().getOrDefault(GreenplumConnectorConstants.TRANSPORT_SCHEME,
+                GreenplumConnectorConstants.DEFAULT_TRANSPORT_SCHEME);
+    }
+
+    public String getGpfdistPort() {
+        return getConnectInfo().getOrDefault(GreenplumConnectorConstants.GPFDIST_PORT,
+                GreenplumConnectorConstants.DEFAULT_GPFDIST_PORT);
+    }
+
     // TODO, identify the remote table that created after deleted
     @Override
     public String getUUID() {
@@ -149,6 +169,11 @@ public class GreenplumTable extends Table {
 
     @Override
     public Set<TableOperation> getSupportedOperations() {
-        return Sets.newHashSet(TableOperation.READ);
+        return Sets.newHashSet(TableOperation.READ, TableOperation.INSERT);
+    }
+
+    @Override
+    public boolean supportInsert() {
+        return true;
     }
 }

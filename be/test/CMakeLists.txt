@@ -25,6 +25,10 @@ set(EXEC_FILES
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
+        ./connector/greenplum/gpfdist_protocol_test.cpp
+        ./connector/greenplum/gpfdist_session_test.cpp
+        ./connector/greenplum/gpfdist_server_test.cpp
+        ./connector/greenplum/greenplum_codec_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp

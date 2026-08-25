@@ -709,9 +709,15 @@ struct TGreenplumScanNode {
   4: optional list<string> filters
   5: optional i64 limit
   6: optional string sql
-  // Data transport the BE should use: "copy" (single-session libpq COPY) for
-  // now; gpfdist-based transports will be added later.
+  // Data transport the BE should use: "copy" (single-session libpq COPY) or
+  // "gpfdist" (segments push to our gpfdist endpoint).
   7: optional string transport
+  // For the gpfdist read path: opaque per-scan token = the path component of
+  // the gpfdist URL the FE puts in the WRITABLE external table it creates on
+  // Greenplum. The BE scan registers a PushSession under it and drains it.
+  8: optional string session_token
+  9: optional string column_separator
+  10: optional string null_marker
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode

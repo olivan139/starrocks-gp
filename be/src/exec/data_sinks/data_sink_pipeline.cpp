@@ -41,6 +41,7 @@
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/greenplum_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
@@ -51,6 +52,7 @@
 #ifndef __APPLE__
 #include "exec/data_sinks/iceberg_table_sink.h"
 #endif
+#include "exec/data_sinks/greenplum_table_sink.h"
 #include "exec/data_sinks/memory_scratch_sink.h"
 #include "exec/data_sinks/multi_cast_data_stream_sink.h"
 #include "exec/data_sinks/mysql_table_sink.h"
@@ -261,6 +263,14 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().mysql_table_sink,
                 mysql_table_sink->get_output_expr(), dop, fragment_ctx);
+        prev_operators.emplace_back(op);
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(GreenplumTableSink)) {
+        auto* greenplum_table_sink = down_cast<GreenplumTableSink*>(this);
+        auto output_expr = greenplum_table_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<GreenplumTableSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().greenplum_table_sink,
+                greenplum_table_sink->get_output_expr(), dop, fragment_ctx);
         prev_operators.emplace_back(op);
         context->add_pipeline(prev_operators);
     } else if (typeid(*this) == typeid(MemoryScratchSink)) {

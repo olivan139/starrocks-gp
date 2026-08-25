@@ -630,8 +630,9 @@ public class StatementPlanner {
                     tbl.getSourceTablePort(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-            // schema table and iceberg and hive table does not need txn
+                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()
+                || targetTable.isGreenplumTable()) {
+            // schema table and iceberg/hive/greenplum table does not need txn
         } else {
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(

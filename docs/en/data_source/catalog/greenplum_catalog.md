@@ -12,12 +12,16 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 A Greenplum catalog is a kind of external catalog that enables you to query data in Greenplum (and
 Greenplum-compatible engines such as Arenadata DB) without ingestion.
 
-This is a **read-only, single-node** integration: StarRocks does not support writing to a Greenplum catalog
-(no `INSERT INTO`), does not support creating materialized views on top of it, and every query against a
-Greenplum catalog table is executed as a single scan against one coordinator connection rather than a
-parallel, distributed scan. Query execution relies on a BE-side native (libpq) reader that streams query
-results through `COPY (<sql>) TO STDOUT`, so the BEs/CNs in your StarRocks cluster must be able to open a
-network connection to the Greenplum coordinator.
+Reads are a **single-node** integration: StarRocks does not support creating materialized views on top of a
+Greenplum catalog table, and every query against a Greenplum catalog table is executed as a single scan
+against one coordinator connection rather than a parallel, distributed scan. Query execution relies on a
+BE-side native (libpq) reader that streams query results through `COPY (<sql>) TO STDOUT`, so the BEs/CNs in
+your StarRocks cluster must be able to open a network connection to the Greenplum coordinator.
+
+Writes (`INSERT INTO`, see [Bulk write into a Greenplum table](#bulk-write-into-a-greenplum-table-insert-into))
+go through a different, parallel path: the BEs expose a gpfdist-compatible endpoint that the Greenplum
+segments pull rows from directly, so write throughput scales with the number of participating BEs and
+Greenplum segments instead of going through a single coordinator connection.
 
 ## Prerequisites
 
@@ -62,6 +66,10 @@ The properties of the Greenplum catalog. `PROPERTIES` must include the following
 | greenplum.user        | Yes          |             | The username used to connect to Greenplum.                                                              |
 | greenplum.password    | Yes          |             | The password used to connect to Greenplum.                                                              |
 | greenplum.transport   | No           | `copy`      | The data transport the BE uses to pull query results. Currently only `copy` (single-session libpq `COPY`) is supported. |
+| greenplum.gpfdist.port | No          | `8907`      | The port on which the gpfdist listener on every BE/CN accepts connections from Greenplum segments during `INSERT INTO`. See [Bulk write into a Greenplum table](#bulk-write-into-a-greenplum-table-insert-into). |
+| greenplum.gpfdist.scheme | No        | `gpfdist`   | The transport scheme used for the gpfdist URLs during `INSERT INTO`: `gpfdist` (plain) or `gpfdists` (mutual TLS). |
+| greenplum.format.column_separator | No | `\t`      | The column separator used for the row format both in the Greenplum-side external-table DDL and by the BE sink encoder during `INSERT INTO`. |
+| greenplum.format.null_marker | No    | `\N`        | The marker used to represent SQL `NULL` in the row format during `INSERT INTO`. |
 
 ### Examples
 
@@ -149,6 +157,57 @@ A Greenplum schema is exposed as a StarRocks database. That is, `<catalog_name>.
    SELECT * FROM <table_name>;
    ```
 
+## Bulk write into a Greenplum table (`INSERT INTO`)
+
+You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to bulk-append the
+result of a StarRocks query into an existing Greenplum table.
+
+### Syntax
+
+```SQL
+INSERT INTO <catalog_name>.<db_name>.<table_name>
+SELECT ...
+```
+
+### Example
+
+```SQL
+INSERT INTO greenplum0.gp_schema.orders
+SELECT order_id, customer_id, amount, order_date
+FROM olap_db.orders_staging
+WHERE order_date >= '2024-01-01';
+```
+
+### How it works
+
+While the StarRocks fragments execute, each participating BE serves its share of the result rows over a
+gpfdist-compatible endpoint. Concurrently, the FE drives a single Greenplum transaction that creates a
+`READABLE EXTERNAL TABLE` pointing at those BE endpoints (one `LOCATION` URL per participating BE host),
+runs `INSERT INTO <target> SELECT * FROM <external table>` so the Greenplum segments pull the rows directly
+from the BEs, and drops the external table again — all inside one transaction. The properties
+`greenplum.gpfdist.port`, `greenplum.gpfdist.scheme`, `greenplum.format.column_separator`, and
+`greenplum.format.null_marker` (see [PROPERTIES](#properties)) control the gpfdist endpoint and the row
+format used by both sides.
+
+### Behavior notes
+
+- **Append-only**: `INSERT INTO` always appends rows. `INSERT OVERWRITE` is not supported against a
+  Greenplum catalog table.
+- **Existing tables only**: The target table must already exist in Greenplum; `INSERT INTO` cannot create
+  it.
+- **Atomic on the Greenplum side**: The external-table creation, the `INSERT INTO ... SELECT`, and the
+  external-table drop run inside a single Greenplum transaction. If the query fails, the row count reported
+  by the BE sinks does not match the row count Greenplum inserted, or the transaction times out, the FE
+  rolls the transaction back and no data is committed.
+- **Requires the BE gpfdist listener**: Every BE/CN that can run a sink fragment must be reachable by the
+  Greenplum segments on `greenplum.gpfdist.port`.
+- **Requires `CREATE EXTERNAL TABLE` privilege**: The Greenplum user configured in the catalog (see
+  `greenplum.user`) must be able to create and drop external tables in the target schema, in addition to the
+  `INSERT` privilege on the target table.
+- **Sink host count vs. segment count**: The number of distinct StarRocks BE hosts serving the write must
+  not exceed the number of Greenplum primary segments; Greenplum rejects a readable external table with more
+  `LOCATION` URLs than primary segments. Lower the sink parallelism if you hit this limit.
+
 ## Data type mapping
 
 StarRocks maps Greenplum (PostgreSQL-wire-compatible) column types to StarRocks types as follows:
@@ -175,9 +234,11 @@ StarRocks maps Greenplum (PostgreSQL-wire-compatible) column types to StarRocks 
 
 ## Limitations
 
-- **Read-only**: `INSERT INTO` and other write operations against a Greenplum catalog table are not
-  supported.
+- **`INSERT INTO` is append-only**: `INSERT OVERWRITE`, `UPDATE`, `DELETE`, and `CREATE TABLE` against a
+  Greenplum catalog table are not supported. See
+  [Bulk write into a Greenplum table](#bulk-write-into-a-greenplum-table-insert-into).
 - **No materialized views**: You cannot create a materialized view on top of a Greenplum catalog table.
-- **Single-node scan**: Every query against a Greenplum catalog table runs as a single scan issued from one
-  BE/CN over one connection to the Greenplum coordinator; scans are not distributed across Greenplum
-  segments. Plan accordingly for large result sets.
+- **Single-node scan**: Every read query against a Greenplum catalog table runs as a single scan issued from
+  one BE/CN over one connection to the Greenplum coordinator; scans are not distributed across Greenplum
+  segments. Plan accordingly for large result sets. `INSERT INTO` is not affected by this limitation: writes
+  are parallelized across the participating BEs and Greenplum segments.

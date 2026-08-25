@@ -617,9 +617,21 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+// Per-sink-instance result of a Greenplum external-table load. Reported by the
+// BE gpfdist endpoint once its session drained; the FE reconciles the sum of
+// rows_written against the row count reported by the Greenplum master before
+// committing the remote transaction.
+struct TGreenplumSinkInfo {
+    1: optional i64 rows_written
+    2: optional i64 bytes_written
+    // location slot index this sink instance served (for diagnostics)
+    3: optional i32 location_slot
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
+    3: optional TGreenplumSinkInfo greenplum_sink_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;

@@ -27,9 +27,20 @@ public final class GreenplumConnectorConstants {
     public static final String CREDENTIAL_PROVIDER = "greenplum.credential.provider";
     public static final String CREDENTIAL_REF = "greenplum.credential.ref";
     public static final String TRANSPORT = "greenplum.transport";
+    // gpfdist listener port on every BE (single shared value; per-BE ports may come later)
+    public static final String GPFDIST_PORT = "greenplum.gpfdist.port";
+    // "gpfdist" (plain, dev) or "gpfdists" (mutual TLS, production)
+    public static final String TRANSPORT_SCHEME = "greenplum.gpfdist.scheme";
+    // row format used both in the external-table DDL and by the BE sink encoder
+    public static final String COLUMN_SEPARATOR = "greenplum.format.column_separator";
+    public static final String NULL_MARKER = "greenplum.format.null_marker";
 
     public static final String DEFAULT_PORT = "5432";
     public static final String TRANSPORT_COPY = "copy";
+    public static final String DEFAULT_GPFDIST_PORT = "8907";
+    public static final String DEFAULT_TRANSPORT_SCHEME = "gpfdist";
+    public static final String DEFAULT_COLUMN_SEPARATOR = "\t";
+    public static final String DEFAULT_NULL_MARKER = "\\N";
 
     private GreenplumConnectorConstants() {
     }
