@@ -29,6 +29,7 @@ set(EXEC_FILES
         ./connector/greenplum/gpfdist_session_test.cpp
         ./connector/greenplum/gpfdist_server_test.cpp
         ./connector/greenplum/greenplum_codec_test.cpp
+        ./connector/greenplum/gpfdist_greenplum_it.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
