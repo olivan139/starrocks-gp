@@ -18,6 +18,8 @@
 #include "column/nullable_column.h"
 #include "base/string/slice.h"
 #include "fmt/format.h"
+
+#include <cctype>
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
 #include "gutil/casts.h"
@@ -53,6 +55,36 @@ size_t find_unescaped(std::string_view data, size_t from, char target) {
         }
     }
     return std::string_view::npos;
+}
+
+// Greenplum's COPY ... TO (the writable-external-table wire format) renders a
+// boolean column as the single characters "t"/"f" (Postgres boolout). StarRocks'
+// CSV boolean converter only accepts "1"/"0"/"true"/"false", so a raw "t"/"f"
+// would fail the whole query. Normalize GP's textual boolean spellings here, in
+// the GP-dialect-aware codec, to "1"/"0" before the generic converter sees them.
+// The full Postgres boolean input vocabulary is accepted defensively even though
+// COPY output itself only ever emits t/f.
+bool normalize_greenplum_bool(std::string* v) {
+    auto eq_ci = [&](std::string_view lit) {
+        if (v->size() != lit.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < lit.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>((*v)[i])) != lit[i]) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (eq_ci("t") || eq_ci("true") || eq_ci("y") || eq_ci("yes") || eq_ci("on") || eq_ci("1")) {
+        v->assign("1");
+        return true;
+    }
+    if (eq_ci("f") || eq_ci("false") || eq_ci("n") || eq_ci("no") || eq_ci("off") || eq_ci("0")) {
+        v->assign("0");
+        return true;
+    }
+    return false; // leave untouched; converter reports the parse error
 }
 
 Status unescape(std::string_view in, std::string* out) {
@@ -179,6 +211,9 @@ Status GreenplumTextDecoder::_decode_row(std::string_view row, Chunk* chunk) {
         }
 
         RETURN_IF_ERROR(unescape(raw, &_field_buf));
+        if (slot->type().type == TYPE_BOOLEAN) {
+            normalize_greenplum_bool(&_field_buf);
+        }
         options.type_desc = &slot->type();
 
         Column* data_column = column;

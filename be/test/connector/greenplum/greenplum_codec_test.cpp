@@ -298,6 +298,54 @@ TEST_F(GreenplumCodecTest, decode_wrong_field_count_fails) {
 }
 
 // ---------------------------------------------------------------------------
+// decode_greenplum_boolean
+//
+// Greenplum's COPY ... TO (the writable-external-table wire format) renders a
+// boolean column via Postgres boolout as the single characters "t"/"f". The
+// generic StarRocks CSV boolean converter only accepts "1"/"0"/"true"/"false",
+// so the GP-dialect codec normalizes GP's spellings before the converter. This
+// pins that behavior: the exact bytes a real GP segment emits ("t"/"f") must
+// decode, and the pre-existing "1"/"0"/"true"/"false" forms must keep working.
+// ---------------------------------------------------------------------------
+TEST_F(GreenplumCodecTest, decode_greenplum_boolean) {
+    const TupleDescriptor* tuple_desc =
+            build_tuple(&_pool, {{"id", TypeDescriptor(TYPE_INT)}, {"flag", TypeDescriptor(TYPE_BOOLEAN)}});
+    ASSERT_NE(nullptr, tuple_desc);
+    ChunkPtr chunk = build_chunk(tuple_desc);
+
+    GreenplumTextDecoder decoder(tuple_desc, "\t", "\\N");
+    int64_t rows = 0;
+    // Rows 1/2 are exactly what GP COPY TO emits (t/f). Rows 3-6 cover the
+    // spellings that already parsed, to prove normalization didn't regress them.
+    std::string data =
+            "1\tt\n"
+            "2\tf\n"
+            "3\ttrue\n"
+            "4\tfalse\n"
+            "5\t1\n"
+            "6\t0\n";
+    auto result = decoder.decode(data, chunk.get(), &rows);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(6, rows);
+    ASSERT_EQ(6u, chunk->num_rows());
+
+    const ColumnPtr& flag = chunk->get_column_by_slot_id(1);
+    EXPECT_EQ(1, flag->get(0).get_int8()); // t
+    EXPECT_EQ(0, flag->get(1).get_int8()); // f
+    EXPECT_EQ(1, flag->get(2).get_int8()); // true
+    EXPECT_EQ(0, flag->get(3).get_int8()); // false
+    EXPECT_EQ(1, flag->get(4).get_int8()); // 1
+    EXPECT_EQ(0, flag->get(5).get_int8()); // 0
+
+    // A NULL boolean still arrives as the raw null marker, not "t"/"f".
+    ChunkPtr chunk2 = build_chunk(tuple_desc);
+    int64_t rows2 = 0;
+    ASSERT_TRUE(decoder.decode("7\t\\N\n", chunk2.get(), &rows2).ok());
+    ASSERT_EQ(1u, chunk2->num_rows());
+    EXPECT_TRUE(chunk2->get_column_by_slot_id(1)->is_null(0));
+}
+
+// ---------------------------------------------------------------------------
 // encode_roundtrip
 // ---------------------------------------------------------------------------
 TEST_F(GreenplumCodecTest, encode_roundtrip) {

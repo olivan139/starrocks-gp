@@ -154,6 +154,23 @@ public class GreenplumReadOrchestrator {
             String extTable = quote(table.getCatalogDBName()) + "." + quote("ext_rd_" + token);
             try (Statement stmt = conn.createStatement()) {
                 this.runningStatement = stmt;
+                // Pin the GUCs that govern how the segments render the pushed
+                // TEXT rows, so the BE decoder sees a stable, loss-free dialect
+                // regardless of the target cluster's defaults:
+                //   DateStyle=ISO,YMD  -> unambiguous "YYYY-MM-DD[ HH:MM:SS]"
+                //                         (a non-ISO default would emit e.g.
+                //                         "01-02-2024", which the BE misparses)
+                //   extra_float_digits=3 -> shortest round-trippable float/double
+                //                         (GP6's PG heritage defaults to 0, which
+                //                         truncates real/double precision on output)
+                stmt.execute("SET DateStyle TO 'ISO, YMD'");
+                stmt.execute("SET extra_float_digits TO 3");
+                // A timestamptz source column cast into the writable ext table's
+                // `timestamp` column is rendered in the session time zone; pin
+                // UTC so the wall-clock the BE decodes is deterministic and
+                // matches the connector's UTC contract (same rule the libpq scan
+                // path applies).
+                stmt.execute("SET TimeZone TO 'UTC'");
                 stmt.execute(buildCreateWritableExternalTableSql(extTable));
                 // Blocks while segments push rows to the BE gpfdist endpoint.
                 stmt.execute("INSERT INTO " + extTable + " " + scanNode.getReadSelectSql());
