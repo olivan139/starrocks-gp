@@ -82,6 +82,8 @@ public class SqlCredentialRedactor {
             .add("pwd")
             .add("property.sasl.password")
             .add("broker.password")
+            .add("greenplum.password")
+            .add("greenplum.credential.ref")
             .build();
 
     // Lowercase set for O(1) lookup (case-insensitive matching)

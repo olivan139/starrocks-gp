@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
@@ -112,6 +113,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -904,6 +906,44 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
                 Config.default_statistics_output_row_count);
+    }
+
+    @Override
+    public Void visitLogicalGreenplumScan(LogicalGreenplumScanOperator node, ExpressionContext context) {
+        return computeGreenplumScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalGreenplumScan(PhysicalGreenplumScanOperator node, ExpressionContext context) {
+        return computeGreenplumScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    // Unlike the JDBC scan (constant default row count), Greenplum statistics come from the
+    // connector metadata (pg_class.reltuples / pg_stats) through the MetadataMgr path, the same
+    // way lake connectors derive theirs. See GreenplumMetadata#getTableStatistics.
+    private Void computeGreenplumScanNode(Operator node, ExpressionContext context, Table table,
+                                          Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
+            // Downstream predicate estimation requires a ColumnStatistic for every referenced
+            // column and a concrete row count. Guarantee both even when the connector returns a
+            // sparse or empty Statistics (e.g. metadata temporarily unreachable).
+            Statistics.Builder builder = Statistics.buildFrom(stats);
+            for (ColumnRefOperator columnRef : columnRefOperatorColumnMap.keySet()) {
+                if (!stats.getColumnStatistics().containsKey(columnRef)) {
+                    builder.addColumnStatistic(columnRef, ColumnStatistic.unknown());
+                }
+            }
+            if (Double.isNaN(stats.getOutputRowCount()) || stats.getOutputRowCount() <= 0) {
+                builder.setOutputRowCount(Config.default_statistics_output_row_count);
+            }
+            context.setStatistics(builder.build());
+        }
+
+        return visitOperator(node, context);
     }
 
     /**

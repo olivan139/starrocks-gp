@@ -24,6 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -43,11 +44,13 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
+import com.starrocks.connector.greenplum.GreenplumLoadOrchestrator;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.GreenplumTableSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -492,6 +495,12 @@ public class InsertPlanner {
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+            } else if (targetTable instanceof GreenplumTable) {
+                GreenplumTable greenplumTable = (GreenplumTable) targetTable;
+                dataSink = new GreenplumTableSink(greenplumTable,
+                        GreenplumLoadOrchestrator.sessionToken(session.getExecutionId()),
+                        greenplumTable.getColumnSeparator(), greenplumTable.getNullMarker(),
+                        greenplumTable.getTransportScheme());
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
             } else if (targetTable.isBlackHoleTable()) {
@@ -511,7 +520,8 @@ public class InsertPlanner {
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
-                    targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
+                    targetTable.isHiveTable() || targetTable.isTableFunctionTable()
+                    || targetTable.isGreenplumTable())) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
@@ -537,6 +547,8 @@ public class InsertPlanner {
                     sinkFragment.setHasIcebergTableSink();
                 } else if (targetTable.isTableFunctionTable()) {
                     sinkFragment.setHasTableFunctionTableSink();
+                } else if (targetTable.isGreenplumTable()) {
+                    sinkFragment.setHasGreenplumTableSink();
                 }
 
                 sinkFragment.disableRuntimeAdaptiveDop();

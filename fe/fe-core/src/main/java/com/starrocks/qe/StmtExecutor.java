@@ -49,6 +49,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
@@ -90,6 +91,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.greenplum.GreenplumLoadOrchestrator;
+import com.starrocks.connector.greenplum.GreenplumReadOrchestrator;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -116,6 +119,8 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.FileScanNode;
+import com.starrocks.planner.GreenplumScanNode;
+import com.starrocks.planner.GreenplumTableSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergMetadataDeleteNode;
@@ -1781,6 +1786,9 @@ public class StmtExecutor {
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 
+        List<GreenplumReadOrchestrator.Handle> greenplumReadLoads =
+                startGreenplumReadLoads(coord, execPlan, getExecTimeout());
+
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
@@ -1841,6 +1849,10 @@ public class StmtExecutor {
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
             } while (!batch.isEos());
+
+            // Greenplum push (if any) has finished feeding the scan: confirm the
+            // GP-side INSERT committed and its external table was dropped.
+            joinGreenplumReadLoads(greenplumReadLoads);
 
             if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze && !isArrowFlight) {
                 responseFields(rawScopedTimer, colNames, outputExprs);
@@ -3140,6 +3152,7 @@ public class StmtExecutor {
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
         String trackingSql = "";
+        GreenplumLoadOrchestrator.Handle greenplumLoadHandle = null;
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
                     context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
@@ -3207,6 +3220,23 @@ public class StmtExecutor {
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlan(execPlan);
 
+            if (targetTable.isGreenplumTable()) {
+                // Fragment placement is final once exec() returns: launch the
+                // Greenplum-side transaction (readable external table + INSERT
+                // pulling from the BE gpfdist endpoints) concurrently with
+                // fragment execution.
+                DataSink dmlSink = execPlan.getFragments().get(0).getSink();
+                GreenplumTableSink greenplumSink = (GreenplumTableSink) dmlSink;
+                List<String> sinkHosts = collectGreenplumSinkHosts(coord);
+                greenplumLoadHandle = GreenplumLoadOrchestrator.start((GreenplumTable) targetTable,
+                        greenplumSink.getSessionToken(), sinkHosts, getExecTimeout());
+            }
+
+            // INSERT INTO sr_table SELECT ... FROM greenplum...: the source-side
+            // greenplum scans push their rows concurrently with execution.
+            List<GreenplumReadOrchestrator.Handle> greenplumReadLoads =
+                    startGreenplumReadLoads(coord, execPlan, getExecTimeout());
+
             int timeout = getExecTimeout();
             long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000;
             coord.join(timeout);
@@ -3254,6 +3284,10 @@ public class StmtExecutor {
                 LOG.warn("insert failed: {}", errMsg);
                 ErrorReport.reportDdlException("%s", ErrorCode.ERR_FAILED_WHEN_INSERT, errMsg);
             }
+
+            // Source-side greenplum pushes (if any) are done once the coordinator
+            // finished successfully: confirm each GP INSERT committed.
+            joinGreenplumReadLoads(greenplumReadLoads);
             LOG.debug("delta files is {}", coord.getDeltaUrls());
 
             if (coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL) != null) {
@@ -3381,6 +3415,15 @@ public class StmtExecutor {
                         .finishSink(catalogName, dbName, tableName, commitInfos, null);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
+            } else if (targetTable.isGreenplumTable()) {
+                Preconditions.checkState(greenplumLoadHandle != null, "greenplum load was not started");
+                long rowsFromSinks = coord.getSinkCommitInfos().stream()
+                        .filter(TSinkCommitInfo::isSetGreenplum_sink_info)
+                        .mapToLong(info -> info.getGreenplum_sink_info().getRows_written())
+                        .sum();
+                loadedRows = greenplumLoadHandle.finish(rowsFromSinks);
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_GREENPLUM_SINK_LABEL";
             } else if (targetTable.isTableFunctionTable()) {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
@@ -3475,6 +3518,10 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
+                } else if (targetTable.isGreenplumTable()) {
+                    if (greenplumLoadHandle != null) {
+                        greenplumLoadHandle.abort(errMsg);
+                    }
                 } else if (targetTable.isBlackHoleTable()) {
                     // black hole table does not need txn
                 } else {
@@ -3559,6 +3606,78 @@ public class StmtExecutor {
 
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    /**
+     * Distinct hosts of the BEs that run the Greenplum sink fragment of this
+     * query. Valid only after {@code coord.exec()} returned (placement final).
+     */
+    private static List<String> collectGreenplumSinkHosts(Coordinator coord) {
+        Preconditions.checkState(coord instanceof DefaultCoordinator,
+                "greenplum sink requires the default coordinator");
+        List<String> hosts = new ArrayList<>();
+        for (ExecutionFragment fragment : ((DefaultCoordinator) coord).getExecutionDAG().getFragmentsInPreorder()) {
+            if (!(fragment.getPlanFragment().getSink() instanceof GreenplumTableSink)) {
+                continue;
+            }
+            for (FragmentInstance instance : fragment.getInstances()) {
+                String host = instance.getWorker().getHost();
+                if (!hosts.contains(host)) {
+                    hosts.add(host);
+                }
+            }
+        }
+        Preconditions.checkState(!hosts.isEmpty(), "no backends assigned to the greenplum sink fragment");
+        return hosts;
+    }
+
+    // For every greenplum SCAN in this query, launch the GP-side push (segments
+    // -> BE gpfdist endpoint) concurrently with fragment execution. Valid only
+    // after coord.exec()/deploy returned (fragment placement is final).
+    private static List<GreenplumReadOrchestrator.Handle> startGreenplumReadLoads(Coordinator coord, ExecPlan execPlan,
+                                                                                  int timeoutSec) {
+        List<GreenplumReadOrchestrator.Handle> handles = new ArrayList<>();
+        if (!(coord instanceof DefaultCoordinator)) {
+            return handles;
+        }
+        List<ScanNode> greenplumScans = new ArrayList<>();
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof GreenplumScanNode) {
+                greenplumScans.add(scanNode);
+            }
+        }
+        if (greenplumScans.isEmpty()) {
+            return handles;
+        }
+        for (ExecutionFragment fragment : ((DefaultCoordinator) coord).getExecutionDAG().getFragmentsInPreorder()) {
+            for (ScanNode node : fragment.getPlanFragment().collectScanNodes().values()) {
+                if (!(node instanceof GreenplumScanNode)) {
+                    continue;
+                }
+                GreenplumScanNode gpScan = (GreenplumScanNode) node;
+                String host = null;
+                for (FragmentInstance instance : fragment.getInstances()) {
+                    host = instance.getWorker().getHost();
+                    break; // single-node UNPARTITIONED scan: one instance
+                }
+                if (host != null) {
+                    handles.add(GreenplumReadOrchestrator.start(gpScan, host, timeoutSec));
+                }
+            }
+        }
+        return handles;
+    }
+
+    private static void joinGreenplumReadLoads(List<GreenplumReadOrchestrator.Handle> handles) {
+        for (GreenplumReadOrchestrator.Handle handle : handles) {
+            handle.join();
+        }
+    }
+
+    private static void abortGreenplumReadLoads(List<GreenplumReadOrchestrator.Handle> handles, String reason) {
+        for (GreenplumReadOrchestrator.Handle handle : handles) {
+            handle.abort(reason);
+        }
     }
 
     private void recordExternalSinkFailure(Table targetTable, DmlType dmlType, Throwable t) {

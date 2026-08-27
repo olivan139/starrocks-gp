@@ -125,6 +125,28 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactGreenplumCredentials() {
+        String sql = "CREATE EXTERNAL CATALOG greenplum_catalog\n" +
+                "PROPERTIES (\n" +
+                " \"type\" = \"greenplum\",\n" +
+                " \"greenplum.host\" = \"127.0.0.1\",\n" +
+                " \"greenplum.database\" = \"gpdb\",\n" +
+                " \"greenplum.user\" = \"gpadmin\",\n" +
+                " \"greenplum.password\" = \"gp_secret_pw\",\n" +
+                " \"greenplum.credential.ref\" = \"secret_ref_id\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("gp_secret_pw"), "greenplum.password should be redacted");
+        Assertions.assertFalse(redacted.contains("secret_ref_id"), "greenplum.credential.ref should be redacted");
+        Assertions.assertTrue(redacted.contains("greenplum"), "Type should remain");
+        Assertions.assertTrue(redacted.contains("127.0.0.1"), "Host should remain");
+        Assertions.assertTrue(redacted.contains("gpdb"), "Database should remain");
+        Assertions.assertTrue(redacted.contains("gpadmin"), "User should remain");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
     public void testRedactGcpCredentials() {
         String sql = "CREATE EXTERNAL CATALOG gcs_catalog\n" +
                 "PROPERTIES (\n" +

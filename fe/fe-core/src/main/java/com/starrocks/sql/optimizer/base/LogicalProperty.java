@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -189,7 +190,8 @@ public class LogicalProperty implements Property {
                     return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet(bucketColumns));
                 }
                 return OneTabletProperty.notSupport();
-            } else if (node instanceof LogicalMysqlScanOperator || node instanceof LogicalJDBCScanOperator) {
+            } else if (node instanceof LogicalMysqlScanOperator || node instanceof LogicalJDBCScanOperator
+                    || node instanceof LogicalGreenplumScanOperator) {
                 return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
             }
             return OneTabletProperty.notSupport();

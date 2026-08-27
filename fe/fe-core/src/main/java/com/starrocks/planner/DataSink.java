@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
@@ -95,6 +96,8 @@ public abstract class DataSink {
         } else if (table instanceof MysqlTable) {
             return true;
         } else if (table instanceof IcebergTable) {
+            return true;
+        } else if (table instanceof GreenplumTable) {
             return true;
         } else if (table instanceof HiveTable) {
             return true;

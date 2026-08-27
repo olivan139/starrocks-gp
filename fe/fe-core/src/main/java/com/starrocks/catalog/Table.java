@@ -106,6 +106,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         HUDI,
         @SerializedName("JDBC")
         JDBC,
+        @SerializedName("GREENPLUM")
+        GREENPLUM,
         @SerializedName("MATERIALIZED_VIEW")
         MATERIALIZED_VIEW,
         @SerializedName("LAKE") // for backward and rollback compatibility
@@ -409,6 +411,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.JDBC;
     }
 
+    public boolean isGreenplumTable() {
+        return type == TableType.GREENPLUM;
+    }
+
     public boolean isTableFunctionTable() {
         return type == TableType.TABLE_FUNCTION;
     }
@@ -596,6 +602,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             return "Elasticsearch";
         } else if (this instanceof JDBCTable) {
             return "JDBC";
+        } else if (this instanceof GreenplumTable) {
+            return "GREENPLUM";
         } else if (this instanceof FileTable) {
             return "File";
         } else {

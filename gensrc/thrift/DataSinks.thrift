@@ -60,7 +60,8 @@ enum TDataSinkType {
     MULTI_OLAP_TABLE_SINK,
     SPLIT_DATA_STREAM_SINK,
     NOOP_SINK,
-    ICEBERG_DELETE_SINK
+    ICEBERG_DELETE_SINK,
+    GREENPLUM_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -285,6 +286,29 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+// Sink for INSERT INTO a Greenplum / Arenadata DB external table.
+// The BE sink instance registers a gpfdist session locally under
+// (session_token, location_slot) and serves the query's result rows to the
+// Greenplum segments that pull from it (readable external table on the GP
+// side, created and driven by the FE orchestrator). When drained it reports
+// rows via TSinkCommitInfo.greenplum_sink_info.
+struct TGreenplumTableSink {
+  1: optional string schema_name
+  2: optional string table_name
+  3: optional list<string> column_names
+  // opaque per-load token; also the path component of the gpfdist URL
+  4: optional string session_token
+  // which LOCATION slot this fragment instance serves (0-based)
+  5: optional i32 location_slot
+  // total number of LOCATION URLs the FE put into the external table DDL
+  6: optional i32 location_count
+  // row format the GP external table declares (TEXT with these options)
+  7: optional string column_separator
+  8: optional string null_marker
+  // "gpfdist" or "gpfdists"
+  9: optional string transport_scheme
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -302,4 +326,5 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
+  18: optional TGreenplumTableSink greenplum_table_sink
 }

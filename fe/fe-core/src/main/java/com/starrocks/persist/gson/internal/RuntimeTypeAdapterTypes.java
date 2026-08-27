@@ -72,6 +72,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.GreenplumTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
@@ -292,6 +293,7 @@ public class RuntimeTypeAdapterTypes {
                 .registerSubtype(EsTable.class, "EsTable")
                 .registerSubtype(ExternalOlapTable.class, "ExternalOlapTable")
                 .registerSubtype(FileTable.class, "FileTable")
+                .registerSubtype(GreenplumTable.class, "GreenplumTable")
                 .registerSubtype(HiveTable.class, "HiveTable")
                 .registerSubtype(HudiTable.class, "HudiTable")
                 .registerSubtype(IcebergTable.class, "IcebergTable")

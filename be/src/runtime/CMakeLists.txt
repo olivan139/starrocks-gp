@@ -115,6 +115,7 @@ set(RUNTIME_FILES
 set(RUNTIME_FILES ${RUNTIME_FILES}
     mysql_table_writer.cpp
     mysql_table_sink.cpp
+    greenplum_table_sink.cpp
 )
 
 ADD_BE_LIB(Runtime

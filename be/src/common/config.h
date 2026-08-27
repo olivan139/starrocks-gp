@@ -41,6 +41,23 @@ namespace starrocks::config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
+
+// ---- Greenplum (ADB) connector: gpfdist data-plane listener ----
+// Port segments connect to; must equal the FE catalog property
+// "greenplum.gpfdist.port" (one shared value across all BEs).
+CONF_Int32(greenplum_gpfdist_port, "8907");
+// Event-loop threads for the gpfdist server (Stage 2).
+CONF_Int32(greenplum_gpfdist_num_threads, "2");
+// Enable mutual-TLS listener (gpfdists scheme). Requires the three paths below.
+CONF_Bool(greenplum_gpfdist_enable_tls, "false");
+CONF_String(greenplum_gpfdist_tls_cert_path, "");
+CONF_String(greenplum_gpfdist_tls_key_path, "");
+CONF_String(greenplum_gpfdist_tls_ca_path, "");
+// Per-session buffer bound; over it, POSTs get 408 (segments retry) and the
+// sink blocks (pipeline backpressure).
+CONF_Int64(greenplum_gpfdist_session_buffer_bytes, "134217728");
+// Idle-session TTL backstop (owner died without closing), gpfdist "-k" analog.
+CONF_Int64(greenplum_gpfdist_session_ttl_ms, "600000");
 CONF_Int32(thrift_port, "0");
 
 // The port for brpc.

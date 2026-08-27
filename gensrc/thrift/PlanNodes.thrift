@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  GREENPLUM_SCAN_NODE
 }
 
 // phases of an execution node
@@ -658,6 +659,30 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+// Scan over a Greenplum / Arenadata DB external table.
+// `sql` carries the complete, ready-to-run SELECT statement (columns, filters
+// and limit already applied and quoted) so the BE can execute it verbatim,
+// e.g. wrapped in COPY (<sql>) TO STDOUT — no SQL assembly needed in C++.
+// `columns`/`filters`/`limit` are also provided individually for transports
+// that prefer to assemble their own statement.
+struct TGreenplumScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string table_name
+  3: optional list<string> columns
+  4: optional list<string> filters
+  5: optional i64 limit
+  6: optional string sql
+  // Data transport the BE should use: "copy" (single-session libpq COPY) or
+  // "gpfdist" (segments push to our gpfdist endpoint).
+  7: optional string transport
+  // For the gpfdist read path: opaque per-scan token = the path component of
+  // the gpfdist URL the FE puts in the WRITABLE external table it creates on
+  // Greenplum. The BE scan registers a PushSession under it and drains it.
+  8: optional string session_token
+  9: optional string column_separator
+  10: optional string null_marker
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
@@ -1498,6 +1523,9 @@ struct TPlanNode {
   // 84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  // Scan node for Greenplum / Arenadata DB
+  86: optional TGreenplumScanNode greenplum_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

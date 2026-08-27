@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -56,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalGreenplumScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -211,6 +213,15 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalJDBCScan(LogicalJDBCScanOperator node, Void context) {
         return "LogicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
+                ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
+                "}";
+    }
+
+    @Override
+    public String visitLogicalGreenplumScan(LogicalGreenplumScanOperator node, Void context) {
+        return "LogicalGreenplumScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", limit=" + node.getLimit() +
                 appendProjectionAndPredicate(node) +
@@ -452,6 +463,15 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, Void context) {
         return "PhysicalJDBCScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
+                ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                ", limit=" + node.getLimit() +
+                appendProjectionAndPredicate(node) +
+                "}";
+    }
+
+    @Override
+    public String visitPhysicalGreenplumScan(PhysicalGreenplumScanOperator node, Void context) {
+        return "PhysicalGreenplumScanOperator" + " {" + "table=" + node.getTable().getCatalogTableName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", limit=" + node.getLimit() +
                 appendProjectionAndPredicate(node) +

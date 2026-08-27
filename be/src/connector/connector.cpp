@@ -23,6 +23,7 @@
 #endif
 #include "connector/cache_stats_connector.h"
 #include "connector/jdbc_connector.h"
+#include "connector/greenplum/greenplum_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 
@@ -47,6 +48,7 @@ ConnectorManager* ConnectorManager::default_instance() {
 const std::string Connector::HIVE = "hive";
 const std::string Connector::ES = "es";
 const std::string Connector::JDBC = "jdbc";
+const std::string Connector::GREENPLUM = "greenplum";
 const std::string Connector::MYSQL = "mysql";
 const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
@@ -62,6 +64,7 @@ public:
         cm->put(Connector::ES, std::make_unique<ESConnector>());
         cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
         cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
+        cm->put(Connector::GREENPLUM, std::make_unique<GreenplumConnector>());
         cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());

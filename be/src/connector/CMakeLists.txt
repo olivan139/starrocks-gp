@@ -19,6 +19,11 @@ ADD_BE_LIB(Connector
         hive_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp
+        greenplum/greenplum_connector.cpp
+        greenplum/greenplum_codec.cpp
+        greenplum/gpfdist_protocol.cpp
+        greenplum/gpfdist_session.cpp
+        greenplum/gpfdist_server.cpp
         lake_connector.cpp
         mysql_connector.cpp
         cache_stats_connector.cpp

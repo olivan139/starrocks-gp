@@ -246,6 +246,7 @@ set(EXEC_FILES
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
     pipeline/sink/dictionary_cache_sink_operator.cpp
+    pipeline/sink/greenplum_table_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp

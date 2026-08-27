@@ -63,6 +63,7 @@
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
+#include "exec/pipeline/sink/greenplum_table_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
@@ -85,6 +86,7 @@
 #endif
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
+#include "runtime/greenplum_table_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/noop_sink.h"
 #include "runtime/result_sink.h"
@@ -142,6 +144,14 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         }
         // TODO: figure out good buffer size based on size of output row
         *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), row_desc, output_exprs);
+        break;
+    }
+
+    case TDataSinkType::GREENPLUM_TABLE_SINK: {
+        if (!thrift_sink.__isset.greenplum_table_sink) {
+            return Status::InternalError("Missing greenplum table sink.");
+        }
+        *sink = std::make_unique<GreenplumTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
 
@@ -483,6 +493,14 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().mysql_table_sink,
                 mysql_table_sink->get_output_expr(), dop, fragment_ctx);
+        prev_operators.emplace_back(op);
+        context->add_pipeline(std::move(prev_operators));
+    } else if (typeid(*this) == typeid(GreenplumTableSink)) {
+        auto* greenplum_table_sink = down_cast<GreenplumTableSink*>(this);
+        auto output_expr = greenplum_table_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<GreenplumTableSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().greenplum_table_sink,
+                greenplum_table_sink->get_output_expr(), dop, fragment_ctx);
         prev_operators.emplace_back(op);
         context->add_pipeline(std::move(prev_operators));
     } else if (typeid(*this) == typeid(MemoryScratchSink)) {

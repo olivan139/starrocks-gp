@@ -201,6 +201,7 @@ enum ConnectorType {
     ICEBERG = 7,
     // BENCHMARK = 8,
     CACHE_STATS = 9,
+    GREENPLUM = 10,
 };
 
 class Connector {
@@ -215,6 +216,7 @@ public:
     static const std::string BINLOG;
     static const std::string ICEBERG;
     static const std::string CACHE_STATS;
+    static const std::string GREENPLUM;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

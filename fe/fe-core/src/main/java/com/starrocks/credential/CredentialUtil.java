@@ -15,6 +15,7 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.connector.greenplum.GreenplumConnectorConstants;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
@@ -76,6 +77,9 @@ public class CredentialUtil {
 
         // Remove for jdbc catalog's password
         properties.remove(JDBCResource.PASSWORD);
+
+        // Remove for greenplum catalog's password
+        properties.remove(GreenplumConnectorConstants.PASSWORD);
 
         // do mask
         properties.computeIfPresent(configKey, (key, value) -> {
